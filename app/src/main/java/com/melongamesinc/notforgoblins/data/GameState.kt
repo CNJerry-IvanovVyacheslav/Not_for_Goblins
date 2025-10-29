@@ -4,21 +4,12 @@ import android.util.Log
 import androidx.compose.runtime.*
 import com.melongamesinc.notforgoblins.domain.models.*
 import com.melongamesinc.notforgoblins.utils.PathTemplates
+import kotlin.math.pow
 
 class GameState {
-
-    val maxTowerSlots = 5
-    val towerSlots = mutableListOf<Pair<Float, Float>>()
-
-    init {
-        towerSlots.add(400f to 400f)
-        towerSlots.add(600f to 300f)
-        towerSlots.add(700f to 500f)
-        towerSlots.add(900f to 250f)
-        towerSlots.add(1000f to 350f)
-    }
-
     var running by mutableStateOf(false)
+    var awaitingTowerPlacement by mutableStateOf(false)
+    var placingStartingTower by mutableStateOf(false)
     var waveNumber by mutableStateOf(0)
     var gold by mutableStateOf(100)
     var baseHealth by mutableStateOf(20)
@@ -30,17 +21,31 @@ class GameState {
     val projectiles = mutableStateListOf<Projectile>()
     val path = PathTemplates.basicPath()
 
-    private var waveManager = WaveManager(this)
-    private var cardManager = CardManager(this)
+    val towerSlots = listOf(
+        100f to 400f,
+        300f to 420f,
+        600f to 300f,
+        750f to 300f,
+        400f to 250f
+    )
 
+    var availableTowers by mutableStateOf(1)
     var cardChoices by mutableStateOf<List<Card>>(emptyList())
         private set
 
+    private var waveManager = WaveManager(this)
+    private var cardManager = CardManager(this)
+
     fun startGame() {
-        reset()
-        towers.add(Tower(towerSlots[0].first, towerSlots[0].second))
-        running = true
-        nextWave()
+        if (baseHealth <= 0) reset()
+        if (availableTowers > 0) {
+            placingStartingTower = true
+            showCardChoice = false
+            running = false
+        } else {
+            running = true
+            placingStartingTower = false
+        }
     }
 
     fun reset() {
@@ -53,20 +58,51 @@ class GameState {
         score = 0
         cardChoices = emptyList()
         showCardChoice = false
+        availableTowers = 1
+        placingStartingTower = false
+        awaitingTowerPlacement = false
+    }
+
+    fun placeTower(slotIndex: Int) {
+        if (slotIndex !in towerSlots.indices) return
+        if (!isSlotFree(slotIndex)) return
+
+        val (x, y) = towerSlots[slotIndex]
+        towers.add(Tower(x, y))
+        availableTowers--
+        placingStartingTower = false
+
+        if (awaitingTowerPlacement) {
+            awaitingTowerPlacement = false
+            nextWave()
+        } else {
+            running = true
+            nextWave()
+        }
     }
 
     fun nextWave() {
         waveNumber++
-        Log.d("Wave", "Starting wave $waveNumber")
         waveManager.spawnWave(waveNumber)
         running = true
         showCardChoice = false
         cardChoices = emptyList()
     }
 
+    fun isSlotFree(index: Int) = towerSlots[index].let { (sx, sy) ->
+        towers.none { t -> (t.x - sx).pow(2) + (t.y - sy).pow(2) < 1f }
+    }
+
+    fun addTowerAtSlot(index: Int) {
+        if (index in towerSlots.indices && isSlotFree(index)) {
+            val (x, y) = towerSlots[index]
+            towers.add(Tower(x, y))
+            running = true
+        }
+    }
+
     fun update(delta: Float) {
         waveManager.update(delta)
-
         if (!running) return
 
         val deadEnemies = mutableListOf<Enemy>()
@@ -75,7 +111,6 @@ class GameState {
             if (e.reachedBase) {
                 baseHealth--
                 deadEnemies.add(e)
-                Log.d("Enemy", "Enemy reached base! HP=$baseHealth")
             } else if (e.hp <= 0) {
                 deadEnemies.add(e)
                 score += 10
@@ -93,30 +128,29 @@ class GameState {
             if (hit != null) {
                 hit.hp -= p.damage
                 deadProjectiles.add(p)
-            } else if (!p.alive) {
-                deadProjectiles.add(p)
-            }
+            } else if (!p.alive) deadProjectiles.add(p)
         }
         projectiles.removeAll(deadProjectiles)
 
         if (enemies.isEmpty() && waveManager.finishedSpawning) {
-            val cards = cardManager.generateThree()
-            cardChoices = cards
-            showCardChoice = true
-            running = false
-            Log.d("GameState", "Wave $waveNumber finished — show cards")
+            if (!awaitingTowerPlacement) {
+                cardChoices = cardManager.generateThree()
+                showCardChoice = true
+                running = false
+            }
         }
 
-        if (baseHealth <= 0) {
-            running = false
-            Log.d("Game", "Game Over!")
-        }
+        if (baseHealth <= 0) running = false
     }
 
     fun applyCard(card: Card) {
         cardManager.applyCard(card)
         showCardChoice = false
         cardChoices = emptyList()
-        nextWave()
+        if (card.effectType == CardEffectType.ADD_TOWER) {
+            awaitingTowerPlacement = true
+        } else {
+            nextWave()
+        }
     }
 }

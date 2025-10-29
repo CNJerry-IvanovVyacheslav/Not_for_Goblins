@@ -38,30 +38,8 @@ class CardManager(private val state: GameState) {
                 Log.d("CardManager", "Gave gold ${card.value.toInt()}")
             }
             CardEffectType.ADD_TOWER -> {
-                val slot = findFreeSlot()
-                if (slot != null) {
-                    state.towers.add(slot)
-                    Log.d("CardManager", "Added new tower at (${slot.x}, ${slot.y})")
-                } else {
-                    // no free slots — give gold instead
-                    state.gold += 25
-                    Log.d("CardManager", "No free slot — gave 25 gold instead")
-                }
+                Log.d("CardManager", "Player should select a tower slot")
             }
         }
-    }
-
-    private fun findFreeSlot(): Tower? {
-        for (slot in state.towerSlots) {
-            val occupied = state.towers.any {
-                val dx = it.x - slot.first
-                val dy = it.y - slot.second
-                dx*dx + dy*dy < 1f
-            }
-            if (!occupied) {
-                return Tower(slot.first, slot.second)
-            }
-        }
-        return null
     }
 }

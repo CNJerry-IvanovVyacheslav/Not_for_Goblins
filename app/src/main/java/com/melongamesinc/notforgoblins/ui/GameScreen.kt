@@ -16,7 +16,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.melongamesinc.notforgoblins.data.GameState
 import com.melongamesinc.notforgoblins.domain.models.Card
+import com.melongamesinc.notforgoblins.domain.models.CardEffectType
 import kotlinx.coroutines.delay
+import kotlin.math.pow
 
 @Composable
 fun GameScreen() {
@@ -45,10 +47,10 @@ fun GameScreen() {
                 .padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(text = "🏰 Not for Goblins", modifier = Modifier.padding(8.dp))
-            Text(text = "Wave: ${gameState.waveNumber}", modifier = Modifier.padding(8.dp))
-            Text(text = "💰 ${gameState.gold}", modifier = Modifier.padding(8.dp))
-            Text(text = "❤️ ${gameState.baseHealth}", modifier = Modifier.padding(8.dp))
+            Text("🏰 Not for Goblins", modifier = Modifier.padding(8.dp))
+            Text("Wave: ${gameState.waveNumber}", modifier = Modifier.padding(8.dp))
+            Text("💰 ${gameState.gold}", modifier = Modifier.padding(8.dp))
+            Text("❤️ ${gameState.baseHealth}", modifier = Modifier.padding(8.dp))
         }
 
         Box(
@@ -72,7 +74,9 @@ fun GameScreen() {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("💀 Game Over 💀", color = Color.White)
                         Spacer(modifier = Modifier.height(8.dp))
-                        Button(onClick = { gameState.startGame() }) { Text("Restart") }
+                        Button(onClick = { gameState.startGame() }) {
+                            Text("Restart")
+                        }
                     }
                 }
             }
@@ -84,10 +88,23 @@ fun GameScreen() {
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.Center
         ) {
-            if (!gameState.running && !gameState.showCardChoice && gameState.baseHealth > 0) {
-                Button(onClick = { gameState.startGame() }) { Text("Start") }
-            } else if (gameState.running) {
-                Button(onClick = { gameState.running = false }) { Text("Pause") }
+            when {
+                gameState.placingStartingTower -> {
+                    Text("Tap a green slot to place your starting tower", color = Color.Black)
+                }
+                gameState.awaitingTowerPlacement -> {
+                    Text("Tap a green slot to place your new tower", color = Color.Black)
+                }
+                !gameState.running && !gameState.showCardChoice && gameState.baseHealth > 0 -> {
+                    Button(onClick = { gameState.startGame() }) {
+                        Text("Start")
+                    }
+                }
+                gameState.running -> {
+                    Button(onClick = { gameState.running = false }) {
+                        Text("Pause")
+                    }
+                }
             }
         }
     }
@@ -100,6 +117,16 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             .fillMaxSize()
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
+                    val canPlace = gameState.placingStartingTower || gameState.awaitingTowerPlacement
+                    if (canPlace) {
+                        gameState.towerSlots.forEachIndexed { index, (sx, sy) ->
+                            if ((sx - offset.x).pow(2) + (sy - offset.y).pow(2) < 2500f) {
+                                if (gameState.isSlotFree(index)) {
+                                    gameState.placeTower(index)
+                                }
+                            }
+                        }
+                    }
                 }
             }
     ) {
@@ -115,7 +142,18 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             )
         }
 
-        for (t in gameState.towers) {
+        gameState.towerSlots.forEachIndexed { index, (sx, sy) ->
+            val isFree = gameState.isSlotFree(index)
+            val canPlace = gameState.placingStartingTower || gameState.awaitingTowerPlacement
+            val color = when {
+                isFree && canPlace -> Color(0x7700FF00)
+                isFree -> Color(0x33FFFFFF)
+                else -> Color(0xFF4b8b3b)
+            }
+            drawRect(color, topLeft = Offset(sx - 25f, sy - 25f), size = Size(50f, 50f))
+        }
+
+        gameState.towers.forEach { t ->
             drawRect(
                 color = Color(0xFF4b8b3b),
                 topLeft = Offset(t.x - 25f, t.y - 25f),
@@ -123,28 +161,18 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             )
         }
 
-        for (e in gameState.enemies) {
-            drawCircle(
-                color = Color(0xFFb22222),
-                radius = 20f,
-                center = Offset(e.x, e.y)
-            )
+        gameState.enemies.forEach { e ->
+            drawCircle(color = Color(0xFFb22222), radius = 20f, center = Offset(e.x, e.y))
         }
 
-        for (p in gameState.projectiles) {
-            drawCircle(
-                color = Color.Yellow,
-                radius = 6f,
-                center = Offset(p.x, p.y)
-            )
+        gameState.projectiles.forEach { p ->
+            drawCircle(color = Color.Yellow, radius = 6f, center = Offset(p.x, p.y))
         }
     }
 }
 
 @Composable
 fun CardSelectionModal(gameState: GameState) {
-    val cards: List<Card> = gameState.cardChoices
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -158,16 +186,11 @@ fun CardSelectionModal(gameState: GameState) {
         ) {
             Text("🎴 Choose Your Reward", color = Color.Black)
             Spacer(modifier = Modifier.height(12.dp))
-            if (cards.isEmpty()) {
-                Text("No cards available", color = Color.Black)
-            } else {
-                cards.forEach { card ->
-                    Button(
-                        onClick = { gameState.applyCard(card) },
-                        modifier = Modifier.padding(vertical = 4.dp)
-                    ) {
-                        Text(text = "${card.title}: ${card.description}")
-                    }
+            gameState.cardChoices.forEach { card ->
+                Button(onClick = {
+                    gameState.applyCard(card)
+                }) {
+                    Text("${card.title}: ${card.description}")
                 }
             }
         }
