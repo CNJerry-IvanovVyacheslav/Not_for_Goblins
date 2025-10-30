@@ -3,10 +3,23 @@ package com.melongamesinc.notforgoblins.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -20,7 +33,6 @@ import com.melongamesinc.notforgoblins.domain.models.SlowTower
 import com.melongamesinc.notforgoblins.domain.models.SniperTower
 import com.melongamesinc.notforgoblins.domain.models.SplashTower
 import com.melongamesinc.notforgoblins.domain.models.TankGoblin
-import kotlinx.coroutines.delay
 import kotlin.math.pow
 
 @Composable
@@ -29,12 +41,17 @@ fun GameScreen() {
     var frameTick by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
+        var lastFrameTime = System.currentTimeMillis()
         while (true) {
+            val now = System.currentTimeMillis()
+            val delta = (now - lastFrameTime).toFloat()
+            lastFrameTime = now
+
             if (gameState.running) {
-                gameState.update(16f)
+                gameState.update(delta, now)
                 frameTick++
             }
-            delay(16L)
+            kotlinx.coroutines.delay(16L)
         }
     }
 
@@ -52,6 +69,14 @@ fun GameScreen() {
                 .fillMaxWidth()
         ) {
             GameCanvas(gameState, frameTick)
+
+            if (gameState.awaitingTowerPlacement && gameState.towerToPlaceOptions.isNotEmpty()) {
+                TowerChoiceModal(gameState)
+            }
+
+            if (gameState.showUpgradeModal) {
+                UpgradeTowerModal(gameState)
+            }
 
             if (gameState.showCardChoice) {
                 CardSelectionModal(gameState)
@@ -91,7 +116,7 @@ fun GameScreen() {
                     Text("Tap a green slot to place your new tower", color = Color.Black)
                 }
 
-                !gameState.running && !gameState.showCardChoice && gameState.baseHealth > 0 -> {
+                !gameState.running && !gameState.showCardChoice && !gameState.showUpgradeModal && gameState.baseHealth > 0 -> {
                     Button(onClick = { gameState.startGame() }) {
                         Text("Start")
                     }
@@ -107,6 +132,59 @@ fun GameScreen() {
     }
 }
 
+
+@Composable
+fun UpgradeTowerModal(gameState: GameState) {
+    val tower = gameState.towerToUpgrade ?: return
+
+    val nextDamage = tower.damage + (3 * 1.05.pow(tower.level)).toInt()
+    val nextRange = tower.range + 20f * 1.02.pow(tower.level).toFloat()
+    val nextFireRate = tower.fireRate * 1.05f
+    val cost = gameState.upgradeCost(tower)
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0x88000000)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .background(Color.White)
+                .padding(24.dp)
+        ) {
+            Text("🔧 Upgrade Tower", color = Color.Black)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text("Level: ${tower.level} → ${tower.level + 1}", color = Color.Black)
+            Text("Damage: ${tower.damage} → $nextDamage", color = Color.Black)
+            Text("Range: ${tower.range} → ${"%.1f".format(nextRange)}", color = Color.Black)
+            Text(
+                "Fire Rate: ${"%.2f".format(tower.fireRate)} → ${"%.2f".format(nextFireRate)}",
+                color = Color.Black
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                "Upgrade Cost: $cost 💰",
+                color = if (gameState.gold >= cost) Color.Black else Color.Red
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = {
+                        if (gameState.gold >= cost) gameState.upgradeTower(tower)
+                    },
+                    enabled = gameState.gold >= cost
+                ) { Text("Upgrade") }
+
+                Button(onClick = { gameState.cancelUpgrade() }) { Text("Cancel") }
+            }
+        }
+    }
+}
+
 @Composable
 fun GameCanvas(gameState: GameState, frameTick: Int) {
     Canvas(
@@ -114,13 +192,21 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             .fillMaxSize()
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
+                    if (gameState.showCardChoice ||
+                        gameState.showUpgradeModal ||
+                        (gameState.awaitingTowerPlacement && gameState.towerToPlaceOptions.isNotEmpty())
+                    ) {
+                        return@detectTapGestures
+                    }
+
                     val canPlace =
                         gameState.placingStartingTower || gameState.awaitingTowerPlacement
+
                     if (canPlace) {
                         gameState.towerSlots.forEachIndexed { index, (sx, sy) ->
                             if ((sx - offset.x).pow(2) + (sy - offset.y).pow(2) < 2500f) {
                                 if (gameState.isSlotFree(index)) {
-                                    val type = gameState.unlockedTowerTypes.firstOrNull() ?: "BASIC"
+                                    val type = gameState.towerToPlace ?: "BASIC"
                                     gameState.placeTower(index, type)
                                 }
                             }
@@ -175,6 +261,38 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
 
         gameState.projectiles.forEach { p ->
             drawCircle(color = Color.Yellow, radius = 6f, center = Offset(p.x, p.y))
+        }
+    }
+}
+
+@Composable
+fun TowerChoiceModal(gameState: GameState) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0x88000000)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .background(Color.White)
+                .padding(24.dp)
+        ) {
+            Text("🏰 Choose a Tower", color = Color.Black)
+            Spacer(modifier = Modifier.height(12.dp))
+            gameState.towerToPlaceOptions.forEach { type ->
+                Button(
+                    onClick = {
+                        gameState.towerToPlace = type
+                        gameState.towerToPlaceOptions = emptyList()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Text(type)
+                }
+            }
         }
     }
 }

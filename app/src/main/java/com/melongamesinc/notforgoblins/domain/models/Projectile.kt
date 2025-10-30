@@ -1,4 +1,4 @@
-package com.melongamesinc.notforgoblins.domain.models.projectile
+package com.melongamesinc.notforgoblins.domain.models
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -22,11 +22,14 @@ open class Projectile(
         val dx = targetX - x
         val dy = targetY - y
         val dist = sqrt(dx * dx + dy * dy)
-        if (dist < 6f) {
-            alive = false
+
+        val step = speed * delta / 1000f
+        if (dist <= step) {
+            x = targetX
+            y = targetY
             return
         }
-        val step = speed * delta / 1000f
+
         x += (dx / dist) * step
         y += (dy / dist) * step
     }

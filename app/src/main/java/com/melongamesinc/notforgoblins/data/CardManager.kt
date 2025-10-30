@@ -1,51 +1,72 @@
 package com.melongamesinc.notforgoblins.data
 
-import android.util.Log
 import com.melongamesinc.notforgoblins.domain.models.Card
 import com.melongamesinc.notforgoblins.domain.models.CardEffectType
 
 class CardManager(private val state: GameState) {
+
     var currentChoices: List<Card> = emptyList()
         internal set
 
     fun generateThree(): List<Card> {
         val pool = mutableListOf<Card>()
+
         pool.add(
             Card(
                 "dmg1",
                 "Sharpened Tips",
-                "Increase all towers' damage by 2",
+                "Increase all towers' damage by 1",
                 CardEffectType.INCREASE_TOWER_DAMAGE,
-                2f
+                1f
             )
         )
         pool.add(
             Card(
                 "rng1",
                 "Extended Sights",
-                "Increase all towers' range by 50",
+                "Increase all towers' range by 5",
                 CardEffectType.INCREASE_TOWER_RANGE,
-                50f
+                5f
             )
         )
-        pool.add(Card("gold1", "Treasure Cache", "Get 50 gold", CardEffectType.GIVE_GOLD, 50f))
+        pool.add(Card("gold1", "Treasure Cache", "Get 500 gold", CardEffectType.GIVE_GOLD, 500f))
         pool.add(
             Card(
                 "add1",
-                "New Ballista",
-                "Add a new basic tower on a free slot",
+                "New Tower",
+                "Add a new tower on a free slot",
                 CardEffectType.ADD_TOWER
             )
         )
+
         pool.add(
             Card(
                 "unlock_mortar",
                 "Unlock Mortar",
-                "Unlocks the Mortar (SplashTower)",
+                "Unlocks Splash Tower",
                 CardEffectType.UNLOCK_TOWER,
                 payload = "SPLASH"
             )
         )
+        pool.add(
+            Card(
+                "unlock_sniper",
+                "Unlock Sniper",
+                "Unlocks Sniper Tower",
+                CardEffectType.UNLOCK_TOWER,
+                payload = "SNIPER"
+            )
+        )
+        pool.add(
+            Card(
+                "unlock_slow",
+                "Unlock Slow Tower",
+                "Unlocks Slow Tower",
+                CardEffectType.UNLOCK_TOWER,
+                payload = "SLOW"
+            )
+        )
+
         pool.add(
             Card(
                 "one_shot",
@@ -59,18 +80,46 @@ class CardManager(private val state: GameState) {
             Card(
                 "stun",
                 "Bell of Panic",
-                "Stun all enemies for 1500ms",
+                "Stun all enemies for 3 seconds",
                 CardEffectType.STUN_ALL,
-                1500f
+                3000f
             )
         )
+
         pool.add(
             Card(
                 "proj_speed",
                 "Quick Arrows",
-                "Increase all towers' attack speed by 50%",
+                "Increase all towers' attack speed by 5%",
                 CardEffectType.GLOBAL_BUFF,
-                1.5f
+                1.05f
+            )
+        )
+        pool.add(
+            Card(
+                "gold_bonus",
+                "Gold Rush",
+                "Increase gold reward from each enemy by 1",
+                CardEffectType.GLOBAL_BUFF,
+                1f
+            )
+        )
+        pool.add(
+            Card(
+                "xp_bonus",
+                "Knowledge Tome",
+                "Increase XP from each enemy by 2",
+                CardEffectType.GLOBAL_BUFF,
+                2f
+            )
+        )
+        pool.add(
+            Card(
+                "instant_xp",
+                "Knowledge Crystal",
+                "Gain 100 XP instantly",
+                CardEffectType.GLOBAL_BUFF,
+                value = 100f  // будем добавлять к experience напрямую
             )
         )
 
@@ -79,7 +128,14 @@ class CardManager(private val state: GameState) {
                 CardEffectType.UNLOCK_TOWER -> card.payload?.let { it !in state.unlockedTowerTypes }
                     ?: true
 
-                CardEffectType.ADD_TOWER -> state.awaitingTowerPlacement.not()
+                CardEffectType.ADD_TOWER -> state.towerSlots.any {
+                    state.isSlotFree(
+                        state.towerSlots.indexOf(
+                            it
+                        )
+                    )
+                }
+
                 else -> true
             }
         }
@@ -88,36 +144,49 @@ class CardManager(private val state: GameState) {
         return currentChoices
     }
 
+    fun reset() {
+        currentChoices = emptyList()
+    }
+
     fun applyCard(card: Card) {
         when (card.effectType) {
-            CardEffectType.INCREASE_TOWER_DAMAGE ->
+            CardEffectType.INCREASE_TOWER_DAMAGE -> {
                 state.towers.forEach { it.damage += card.value.toInt() }
+                state.globalDamageBonus += card.value.toInt()
+            }
 
-            CardEffectType.INCREASE_TOWER_RANGE ->
+            CardEffectType.INCREASE_TOWER_RANGE -> {
                 state.towers.forEach { it.range += card.value }
+                state.globalRangeBonus += card.value
+            }
 
-            CardEffectType.GIVE_GOLD ->
-                state.gold += card.value.toInt()
+            CardEffectType.GIVE_GOLD -> state.gold += (card.value * state.goldMultiplier).toInt()
 
-            CardEffectType.ADD_TOWER ->
-                state.awaitingTowerPlacement = true
+            CardEffectType.ADD_TOWER -> {
+            }
 
-            CardEffectType.UNLOCK_TOWER ->
-                card.payload?.let { state.unlockedTowerTypes.add(it) }
-
-            CardEffectType.ONE_SHOT_DAMAGE ->
-                state.enemies.forEach { it.hp -= card.value.toInt() }
-
+            CardEffectType.UNLOCK_TOWER -> card.payload?.let { state.unlockedTowerTypes.add(it) }
+            CardEffectType.ONE_SHOT_DAMAGE -> state.enemies.forEach { it.hp -= card.value.toInt() }
             CardEffectType.STUN_ALL -> {
                 val now = System.currentTimeMillis()
                 state.enemies.forEach { it.applySlow(0f, card.value.toLong(), now) }
             }
 
-            CardEffectType.GLOBAL_BUFF ->
-                state.towers.forEach { it.fireRate *= card.value }
+            CardEffectType.GLOBAL_BUFF -> {
+                when (card.id) {
+                    "proj_speed" -> {
+                        state.towers.forEach { it.fireRate *= card.value }
+                        state.globalFireRateMultiplier *= card.value
+                    }
 
-            else -> Unit
+                    "gold_bonus" -> state.goldMultiplier += card.value
+                    "xp_bonus" -> state.xpMultiplier += card.value
+                    "instant_xp" -> {
+                        state.experience += card.value.toInt()
+                        state.checkLevelUp()
+                    }
+                }
+            }
         }
-        Log.d("CardManager", "Applied ${card.title}")
     }
 }

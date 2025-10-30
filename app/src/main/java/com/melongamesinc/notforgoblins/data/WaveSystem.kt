@@ -16,8 +16,9 @@ class WaveSystem(private val state: GameState) {
         private set
 
     private var waveDuration = 10000f
+    private var spawnMultiplier = 1f
     private var restTime = 3000f
-    private var spawnInterval = 2000f
+    private var spawnInterval = 500f
     private var timer = 0f
     private var nextSpawn = 0f
 
@@ -39,9 +40,7 @@ class WaveSystem(private val state: GameState) {
             nextSpawn = spawnInterval
         }
 
-        if (timer <= 0f) {
-            startNextWave()
-        }
+        if (timer <= 0f) startNextWave()
 
         if (state.enemies.isEmpty() && timer > restTime) {
             timer = restTime
@@ -50,15 +49,31 @@ class WaveSystem(private val state: GameState) {
 
     private fun spawnEnemy() {
         val wave = state.waveNumber
-        val type = chooseEnemyType(wave)
-        val hpMult = 1.05f.pow(wave)
-        val spdMult = 1.01f.pow(wave)
-        val enemy: BaseEnemy = when (type) {
-            EnemyType.BASIC -> BasicGoblin(state.path, hpMult, spdMult)
-            EnemyType.FAST -> FastGoblin(state.path, hpMult, spdMult)
-            EnemyType.TANK -> TankGoblin(state.path, hpMult, spdMult)
+
+        val hpMult = 1.12f.pow(wave)
+        val spdMult = 1.025f.pow(wave)
+
+        val enemiesPerSpawn = ((spawnMultiplier * 1 + wave * 0.3f)).toInt().coerceAtLeast(1)
+
+        repeat(enemiesPerSpawn) { i ->
+            val type = if (wave % 5 == 0 && Random.nextFloat() < 0.4f) EnemyType.TANK
+            else chooseEnemyType(wave)
+
+            val baseEnemy: BaseEnemy = when (type) {
+                EnemyType.BASIC -> BasicGoblin(state.path, hpMult, spdMult)
+                EnemyType.FAST -> FastGoblin(state.path, hpMult, spdMult)
+                EnemyType.TANK -> TankGoblin(state.path, hpMult, spdMult)
+            }
+
+            val enemy = baseEnemy
+
+            val yOffset = Random.nextFloat() * 100f - 50f
+            enemy.x = -Random.nextFloat() * 50f
+            enemy.y = state.path.first().second + yOffset
+
+            enemy.spawnDelay = i * 150L
+            state.enemies.add(enemy)
         }
-        state.enemies.add(enemy)
     }
 
     private fun chooseEnemyType(wave: Int): EnemyType {
@@ -76,11 +91,10 @@ class WaveSystem(private val state: GameState) {
 
     private fun startNextWave() {
         state.waveNumber++
-        waveDuration = (10000f + state.waveNumber * 500).coerceAtMost(20000f)
+        spawnMultiplier = 1f * 1.18f.pow(state.waveNumber)
+        waveDuration = (6000f + state.waveNumber * 300).coerceAtMost(15000f)
         timer = waveDuration
         nextSpawn = 0f
         timeToNextWave = timer / 1000f
     }
-
-    private enum class EnemyType { BASIC, FAST, TANK }
 }

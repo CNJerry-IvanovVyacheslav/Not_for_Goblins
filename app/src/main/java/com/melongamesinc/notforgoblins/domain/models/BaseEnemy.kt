@@ -1,7 +1,8 @@
 package com.melongamesinc.notforgoblins.domain.models
 
-import androidx.compose.runtime.*
-import com.melongamesinc.notforgoblins.domain.models.projectile.Projectile
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -16,6 +17,10 @@ open class BaseEnemy(
     private var pathIndex = 0
     var reachedBase = false
 
+    var spawnDelay: Long = 0
+    private var spawnTimer: Long = 0
+    private var spawned = false
+
     private var slowUntilMs: Long = 0
     private var slowMultiplier: Float = 1f
 
@@ -24,11 +29,18 @@ open class BaseEnemy(
         slowUntilMs = nowMs + durationMs
     }
 
-    fun update(delta: Float, nowMs: Long = System.currentTimeMillis()) {
+    fun update(delta: Float, nowMs: Long) {
+        if (!spawned) {
+            spawnTimer += delta.toLong()
+            if (spawnTimer < spawnDelay) return
+            spawned = true
+        }
+
         if (pathIndex >= path.size - 1) {
             reachedBase = true
             return
         }
+
         if (nowMs > slowUntilMs) slowMultiplier = 1f
 
         val (tx, ty) = path[pathIndex + 1]
@@ -53,13 +65,7 @@ class BasicGoblin(path: List<Pair<Float, Float>>, hpMult: Float, spdMult: Float)
     BaseEnemy(path, speed = 60f * spdMult, hp = (10 * hpMult).toInt(), xpReward = 1)
 
 class FastGoblin(path: List<Pair<Float, Float>>, hpMult: Float, spdMult: Float) :
-    BaseEnemy(
-        path,
-        speed = 90f * spdMult,
-        hp = (6 * hpMult).toInt(),
-        xpReward = 2
-    ) // было 120f -> 90f
-
+    BaseEnemy(path, speed = 90f * spdMult, hp = (6 * hpMult).toInt(), xpReward = 2)
 
 class TankGoblin(path: List<Pair<Float, Float>>, hpMult: Float, spdMult: Float) :
     BaseEnemy(path, speed = 35f * spdMult, hp = (30 * hpMult).toInt(), xpReward = 5)

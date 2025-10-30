@@ -3,9 +3,7 @@ package com.melongamesinc.notforgoblins.domain.models
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import com.melongamesinc.notforgoblins.domain.models.projectile.Projectile
-import com.melongamesinc.notforgoblins.domain.models.projectile.SplashProjectile
-import com.melongamesinc.notforgoblins.domain.models.projectile.SlowProjectile
+import kotlin.math.pow
 import kotlin.math.sqrt
 
 abstract class BaseTower(
@@ -34,15 +32,26 @@ abstract class BaseTower(
         return sqrt(dx * dx + dy * dy)
     }
 
+    fun upgradeCost(playerLevel: Int = 1, baseCost: Int = 20): Int {
+        val towerMultiplier = 2.0.pow((level - 1).toDouble())
+        val playerMultiplier = 1 + playerLevel * 0.05
+        return (baseCost * towerMultiplier * playerMultiplier).toInt()
+    }
+
     open fun upgrade() {
         level++
-        damage += 3
-        range += 20f
-        fireRate *= 1.1f
+
+        damage += (3 * 1.05.pow(level - 1)).toInt()
+        range += 20f * 1.02.pow(level - 1).toFloat()
+        fireRate *= 1.05f
+    }
+
+    fun isClicked(px: Float, py: Float, size: Float = 50f): Boolean {
+        val half = size / 2
+        return px in (x - half)..(x + half) && py in (y - half)..(y + half)
     }
 }
 
-// Basic single-target
 class BasicBallista(x: Float, y: Float) :
     BaseTower(x, y, range = 200f, damage = 6, fireRate = 1.2f) {
     override fun update(
@@ -60,9 +69,8 @@ class BasicBallista(x: Float, y: Float) :
     }
 }
 
-// Splash / mortar
 class SplashTower(x: Float, y: Float) :
-    BaseTower(x, y, range = 260f, damage = 12, fireRate = 0.45f) {
+    BaseTower(x, y, range = 260f, damage = 10, fireRate = 0.3f) {
     override fun update(
         delta: Float,
         enemies: List<BaseEnemy>,
@@ -80,7 +88,7 @@ class SplashTower(x: Float, y: Float) :
                     target.y,
                     speed = 320f,
                     damage = damage,
-                    radius = 70f
+                    radius = 50f
                 )
             )
             cooldown = 1f / fireRate
@@ -110,7 +118,8 @@ class SniperTower(x: Float, y: Float) :
     }
 }
 
-class SlowTower(x: Float, y: Float) : BaseTower(x, y, range = 180f, damage = 2, fireRate = 1.0f) {
+class SlowTower(x: Float, y: Float) :
+    BaseTower(x, y, range = 180f, damage = 2, fireRate = 1.0f) {
     override fun update(
         delta: Float,
         enemies: List<BaseEnemy>,
@@ -134,9 +143,5 @@ class SlowTower(x: Float, y: Float) : BaseTower(x, y, range = 180f, damage = 2, 
             )
             cooldown = 1f / fireRate
         }
-    }
-
-    override fun upgrade() {
-        super.upgrade()
     }
 }
