@@ -5,29 +5,53 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlin.math.sqrt
 
-class Projectile(
+open class Projectile(
     startX: Float,
     startY: Float,
     val targetX: Float,
     val targetY: Float,
     var speed: Float = 400f,
-    val damage: Int = 5
+    open val damage: Int = 5
 ) {
     var x by mutableStateOf(startX)
     var y by mutableStateOf(startY)
     var alive by mutableStateOf(true)
 
-    fun update(delta: Float) {
+    open fun update(delta: Float) {
         if (!alive) return
         val dx = targetX - x
         val dy = targetY - y
         val dist = sqrt(dx * dx + dy * dy)
-        if (dist < 6f) {
-            alive = false
+
+        val step = speed * delta / 1000f
+        if (dist <= step) {
+            x = targetX
+            y = targetY
             return
         }
-        val step = speed * delta / 1000f
+
         x += (dx / dist) * step
         y += (dy / dist) * step
     }
 }
+
+class SplashProjectile(
+    startX: Float,
+    startY: Float,
+    targetX: Float,
+    targetY: Float,
+    speed: Float = 300f,
+    override val damage: Int = 10,
+    val radius: Float = 60f
+) : Projectile(startX, startY, targetX, targetY, speed, damage)
+
+class SlowProjectile(
+    startX: Float,
+    startY: Float,
+    targetX: Float,
+    targetY: Float,
+    speed: Float = 380f,
+    override val damage: Int = 3,
+    val slowMultiplier: Float = 0.5f,
+    val slowDurationMs: Long = 1500L
+) : Projectile(startX, startY, targetX, targetY, speed, damage)
