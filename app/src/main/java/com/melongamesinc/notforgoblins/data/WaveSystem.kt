@@ -50,10 +50,9 @@ class WaveSystem(private val state: GameState) {
     private fun spawnEnemy() {
         val wave = state.waveNumber
 
-        val hpMult = 1.08f.pow(wave)      // ХП врагов растёт постепенно
-        val spdMult = 1.015f.pow(wave)    // Скорость растёт медленно
+        val hpMult = 1.08f.pow(wave)
+        val spdMult = 1.015f.pow(wave)
 
-        // Линейный рост врагов, ограниченный максимумом
         val maxEnemiesPerSpawn = when {
             wave < 5 -> 2
             wave < 10 -> 3
@@ -74,11 +73,12 @@ class WaveSystem(private val state: GameState) {
             val yOffset = Random.nextFloat() * 80f - 40f
             baseEnemy.x = -Random.nextFloat() * 50f
             baseEnemy.y = state.path.first().second + yOffset
+            baseEnemy.spawnDelay = i * 250L
 
-            baseEnemy.spawnDelay = i * 250L // увеличиваем интервал между врагами
-            state.enemies.add(baseEnemy)
+            state.addEnemy(baseEnemy)
         }
     }
+
 
     private fun chooseEnemyType(wave: Int): EnemyType {
         val r = Random.nextFloat()
@@ -96,11 +96,10 @@ class WaveSystem(private val state: GameState) {
     private fun startNextWave() {
         state.waveNumber++
 
-        // Рост интервала между спавнами и мультипликатора врагов
         spawnMultiplier = 1f + state.waveNumber * 0.05f
         waveDuration = (7000f + state.waveNumber * 200).coerceAtMost(12000f)
         spawnInterval =
-            (500f + state.waveNumber * 50f).coerceAtMost(1200f) // увеличение интервала между спавнами
+            (500f + state.waveNumber * 50f).coerceAtMost(1200f)
 
         timer = waveDuration
         nextSpawn = 0f

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlin.math.pow
 import kotlin.math.sqrt
+import kotlin.random.Random
 
 abstract class BaseTower(
     var x: Float,
@@ -15,6 +16,7 @@ abstract class BaseTower(
 ) {
     protected var cooldown by mutableStateOf(0f)
     var level by mutableStateOf(1)
+    var critChance: Float by mutableStateOf(0f)
 
     open fun updateCooldown(delta: Float) {
         if (cooldown > 0f) cooldown -= delta / 1000f
@@ -23,7 +25,8 @@ abstract class BaseTower(
     abstract fun update(
         delta: Float,
         enemies: List<BaseEnemy>,
-        projectiles: MutableList<Projectile>
+        projectiles: MutableList<Projectile>,
+        globalCrit: Float = 0f
     )
 
     fun distTo(e: BaseEnemy): Float {
@@ -40,30 +43,50 @@ abstract class BaseTower(
 
     open fun upgrade() {
         level++
-
         damage += (3 * 1.05.pow(level - 1)).toInt()
         range += 20f * 1.02.pow(level - 1).toFloat()
         fireRate *= 1.05f
+    }
+
+    fun upgradeFree() {
+        upgrade()
     }
 
     fun isClicked(px: Float, py: Float, size: Float = 50f): Boolean {
         val half = size / 2
         return px in (x - half)..(x + half) && py in (y - half)..(y + half)
     }
+
+    fun calcDamage(globalCrit: Float = 0f): Int {
+        val totalCrit = critChance + globalCrit
+        return if (Random.nextFloat() < totalCrit) damage * 2 else damage
+    }
 }
 
 class BasicBallista(x: Float, y: Float) :
     BaseTower(x, y, range = 200f, damage = 6, fireRate = 1.2f) {
+
     override fun update(
         delta: Float,
         enemies: List<BaseEnemy>,
-        projectiles: MutableList<Projectile>
+        projectiles: MutableList<Projectile>,
+        globalCrit: Float
     ) {
         updateCooldown(delta)
         if (cooldown > 0f) return
         val target = enemies.minByOrNull { distTo(it) }
         if (target != null && distTo(target) <= range) {
-            projectiles.add(Projectile(x, y, target.x, target.y, speed = 500f, damage = damage))
+            val finalDamage = calcDamage(globalCrit)
+            projectiles.add(
+                Projectile(
+                    x,
+                    y,
+                    target.x,
+                    target.y,
+                    speed = 500f,
+                    damage = finalDamage
+                )
+            )
             cooldown = 1f / fireRate
         }
     }
@@ -71,23 +94,23 @@ class BasicBallista(x: Float, y: Float) :
 
 class SplashTower(x: Float, y: Float) :
     BaseTower(x, y, range = 260f, damage = 10, fireRate = 0.3f) {
+
     override fun update(
         delta: Float,
         enemies: List<BaseEnemy>,
-        projectiles: MutableList<Projectile>
+        projectiles: MutableList<Projectile>,
+        globalCrit: Float
     ) {
         updateCooldown(delta)
         if (cooldown > 0f) return
         val target = enemies.minByOrNull { distTo(it) }
         if (target != null && distTo(target) <= range) {
+            val finalDamage = calcDamage(globalCrit)
             projectiles.add(
                 SplashProjectile(
-                    x,
-                    y,
-                    target.x,
-                    target.y,
+                    x, y, target.x, target.y,
                     speed = 320f,
-                    damage = damage,
+                    damage = finalDamage,
                     radius = 50f
                 )
             )
@@ -103,16 +126,28 @@ class SplashTower(x: Float, y: Float) :
 
 class SniperTower(x: Float, y: Float) :
     BaseTower(x, y, range = 600f, damage = 25, fireRate = 0.25f) {
+
     override fun update(
         delta: Float,
         enemies: List<BaseEnemy>,
-        projectiles: MutableList<Projectile>
+        projectiles: MutableList<Projectile>,
+        globalCrit: Float
     ) {
         updateCooldown(delta)
         if (cooldown > 0f) return
         val target = enemies.filter { distTo(it) <= range }.maxByOrNull { it.hp }
         if (target != null) {
-            projectiles.add(Projectile(x, y, target.x, target.y, speed = 900f, damage = damage))
+            val finalDamage = calcDamage(globalCrit)
+            projectiles.add(
+                Projectile(
+                    x,
+                    y,
+                    target.x,
+                    target.y,
+                    speed = 900f,
+                    damage = finalDamage
+                )
+            )
             cooldown = 1f / fireRate
         }
     }
@@ -120,23 +155,23 @@ class SniperTower(x: Float, y: Float) :
 
 class SlowTower(x: Float, y: Float) :
     BaseTower(x, y, range = 180f, damage = 2, fireRate = 1.0f) {
+
     override fun update(
         delta: Float,
         enemies: List<BaseEnemy>,
-        projectiles: MutableList<Projectile>
+        projectiles: MutableList<Projectile>,
+        globalCrit: Float
     ) {
         updateCooldown(delta)
         if (cooldown > 0f) return
         val target = enemies.minByOrNull { distTo(it) }
         if (target != null && distTo(target) <= range) {
+            val finalDamage = calcDamage(globalCrit)
             projectiles.add(
                 SlowProjectile(
-                    x,
-                    y,
-                    target.x,
-                    target.y,
+                    x, y, target.x, target.y,
                     speed = 360f,
-                    damage = damage,
+                    damage = finalDamage,
                     slowMultiplier = 0.5f,
                     slowDurationMs = 1500L
                 )

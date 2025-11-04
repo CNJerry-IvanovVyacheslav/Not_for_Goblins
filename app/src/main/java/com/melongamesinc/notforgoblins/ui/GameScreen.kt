@@ -156,6 +156,8 @@ fun UpgradeTowerModal(gameState: GameState) {
     val nextRange = tower.range + 20f * 1.02.pow(tower.level).toFloat()
     val nextFireRate = tower.fireRate * 1.05f
     val cost = gameState.upgradeCost(tower)
+    val globalCrit = gameState.globalCritChance ?: 0f
+    val totalCrit = tower.critChance + globalCrit
 
     Box(
         modifier = Modifier
@@ -171,13 +173,18 @@ fun UpgradeTowerModal(gameState: GameState) {
             Text("🔧 Upgrade Tower", color = Color.Black)
             Spacer(modifier = Modifier.height(12.dp))
 
-            Text("Level: ${tower.level} → ${tower.level + 1}", color = Color.Black)
+            Text("Level: ${tower.level}", color = Color.Black)
+
             Text("Damage: ${tower.damage} → $nextDamage", color = Color.Black)
-            Text("Range: ${tower.range} → ${"%.1f".format(nextRange)}", color = Color.Black)
+            Text(
+                "Range: ${"%.1f".format(tower.range)} → ${"%.1f".format(nextRange)}",
+                color = Color.Black
+            )
             Text(
                 "Fire Rate: ${"%.2f".format(tower.fireRate)} → ${"%.2f".format(nextFireRate)}",
                 color = Color.Black
             )
+            Text("Crit Chance: ${"%.0f".format(totalCrit * 100)}%", color = Color.Black)
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
@@ -199,6 +206,7 @@ fun UpgradeTowerModal(gameState: GameState) {
     }
 }
 
+
 @Composable
 fun GameCanvas(gameState: GameState, frameTick: Int) {
     val flicker = remember { mutableStateOf(1f) }
@@ -206,14 +214,15 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
     val towerAngles = remember { mutableMapOf<Int, Float>() }
     val blinkProgress = remember { mutableStateOf(0f) }
     val blinkTimers =
-        remember { mutableStateMapOf<Any, Float>() } // таймер моргания для каждого гоблина
+        remember { mutableStateMapOf<Any, Float>() }
 
     LaunchedEffect(frameTick) {
-        blinkProgress.value = (sin(frameTick / 10f) + 1f) / 2f // 0..1, управляет морганием
+        blinkProgress.value = (sin(frameTick / 10f) + 1f) / 2f
+        val currentEnemySet = gameState.enemies.toSet()
+        blinkTimers.keys.retainAll { it in currentEnemySet }
     }
 
 
-    // 🔥 Эффекты анимации факелов и флага
     LaunchedEffect(frameTick) {
         flicker.value = 0.8f + (0.2f * sin(frameTick / 5f))
         flagWave.value = sin(frameTick / 10f)
@@ -242,7 +251,6 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
                 }
             }
     ) {
-        // 🌄 Фон
         drawRect(
             brush = Brush.verticalGradient(listOf(Color(0xFFa8e063), Color(0xFF56ab2f))),
             size = size
@@ -250,7 +258,6 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
 
         val path = gameState.path
 
-// 1️⃣ — Мягкая тень под дорогой (единый контур)
         drawPath(
             path = Path().apply {
                 moveTo(path.first().first, path.first().second + 6f)
@@ -263,7 +270,6 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             style = Stroke(width = 60f, cap = StrokeCap.Round)
         )
 
-// 2️⃣ — Основная дорога с закруглениями (единый контур)
         drawPath(
             path = Path().apply {
                 moveTo(path.first().first, path.first().second)
@@ -276,7 +282,6 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             style = Stroke(width = 40f, cap = StrokeCap.Round)
         )
 
-        // 🏰 Замок дварфов
         val (castleX, castleY) = path.last()
         drawRect(
             color = Color(0xFF555555),
@@ -284,19 +289,15 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             size = Size(120f, 120f)
         )
 
-        // Башенки
         drawCircle(Color(0xFF3A3A3A), 20f, Offset(castleX - 50f, castleY - 50f))
         drawCircle(Color(0xFF3A3A3A), 20f, Offset(castleX + 50f, castleY - 50f))
 
-        // Ворота
         drawRect(Color(0xFF2E2E2E), Offset(castleX - 20f, castleY + 10f), Size(40f, 50f))
 
-        // 🔥 Факелы у входа (мерцают)
         val torchColor = Color(0xFFFFA000).copy(alpha = 0.6f + 0.4f * flicker.value)
         drawCircle(torchColor, 8f, Offset(castleX - 40f, castleY + 15f))
         drawCircle(torchColor, 8f, Offset(castleX + 40f, castleY + 15f))
 
-        // 🚩 Флаг дварфов
         val flagX = castleX
         val flagY = castleY - 60f
         drawLine(Color.DarkGray, Offset(flagX, flagY), Offset(flagX, flagY - 40f), 4f)
@@ -315,7 +316,6 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             color = Color(0xFFB71C1C)
         )
 
-        // 🏗️ Слоты под башни
         gameState.towerSlots.forEachIndexed { index, (sx, sy) ->
             val isFree = gameState.isSlotFree(index)
             val canPlace = gameState.placingStartingTower || gameState.awaitingTowerPlacement
@@ -328,7 +328,6 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             if (!isFree) drawCircle(Color(0x22000000), 30f, Offset(sx + 3, sy + 3))
         }
 
-        // 🏰 Башни с плавной наводкой
         gameState.towers.forEachIndexed { index, t ->
             val (baseColor, accentColor) = when (t) {
                 is SplashTower -> Color(0xFF8B4513) to Color(0xFFFFA726)
@@ -340,43 +339,39 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             drawCircle(Color(0x33000000), 28f, Offset(t.x + 4, t.y + 4))
             drawCircle(baseColor, 25f, Offset(t.x, t.y))
 
-            // 🔫 Плавное наведение пушки
             val nearestEnemy =
                 gameState.enemies.minByOrNull { (it.x - t.x).pow(2) + (it.y - t.y).pow(2) }
-            val targetAngle = if (nearestEnemy != null) {
-                kotlin.math.atan2(nearestEnemy.y - t.y, nearestEnemy.x - t.x)
-            } else 0f
-
             val currentAngle = towerAngles[index] ?: 0f
-            val delta =
-                ((targetAngle - currentAngle + Math.PI) % (2 * Math.PI) - Math.PI).toFloat() // кратчайший путь
-            val newAngle = currentAngle + delta * 0.1f // 0.1f — скорость поворота
-            towerAngles[index] = newAngle
+
+            if (nearestEnemy != null) {
+                val targetAngle = atan2(nearestEnemy.y - t.y, nearestEnemy.x - t.x)
+                val delta =
+                    ((targetAngle - currentAngle + Math.PI) % (2 * Math.PI) - Math.PI).toFloat()
+                val newAngle = currentAngle + delta * 0.1f
+                towerAngles[index] = newAngle
+            }
 
             val gunLength = 20f
-            val gunX = t.x + gunLength * kotlin.math.cos(newAngle)
-            val gunY = t.y + gunLength * kotlin.math.sin(newAngle)
+            val angleToDraw = towerAngles[index] ?: 0f
+            val gunX = t.x + gunLength * cos(angleToDraw)
+            val gunY = t.y + gunLength * sin(angleToDraw)
             drawLine(accentColor, Offset(t.x, t.y), Offset(gunX, gunY), 6f, cap = StrokeCap.Round)
         }
 
 
-        // 👾 Враги с лицами и анимацией
         gameState.enemies.forEach { e ->
-            // Определяем цвет головы гоблина
             val col = when (e) {
-                is TankGoblin -> Color(0xFF093B00) // зелёный с красноватым оттенком
-                is FastGoblin -> Color(0xFF8AFF37) // зелёный с оранжевым оттенком
-                else -> Color(0xFF4CAF50)          // обычный зелёный
+                is TankGoblin -> Color(0xFF093B00)
+                is FastGoblin -> Color(0xFF8AFF37)
+                else -> Color(0xFF4CAF50)
             }
 
-            // Тень и голова
             drawCircle(Color(0x33000000), 20f, Offset(e.x + 3, e.y + 3))
             drawCircle(col, 18f, Offset(e.x, e.y))
 
             val (targetX, targetY) = e.nextTarget()
             val angle = atan2(targetY - e.y, targetX - e.x)
 
-            // 👀 Глаза с морганием
             val blinkTime = blinkTimers.getOrElse(e) { (0..3000).random().toFloat() }
             blinkTimers[e] = blinkTime + 16f
             val isBlinking = blinkTime > 3000f
@@ -398,7 +393,6 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             )
             if (isBlinking) blinkTimers[e] = 0f
 
-            // 👃 Нос
             val nosePath = Path().apply {
                 when (e) {
                     is BasicGoblin -> {
@@ -432,7 +426,6 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             }
             drawPath(nosePath, Color.Black)
 
-            // 👄 Рот с колебанием
             val mouthOffset = when (e) {
                 is BasicGoblin -> 1f * sin(frameTick / 5f)
                 is FastGoblin -> 0f
@@ -442,16 +435,16 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             val mouthY = e.y + 7f + mouthOffset
 
             when (e) {
-                is BasicGoblin -> { // улыбающийся
+                is BasicGoblin -> {
                     drawLine(Color.Black, Offset(e.x - 4, mouthY), Offset(e.x, mouthY + 2), 1.5f)
                     drawLine(Color.Black, Offset(e.x, mouthY + 2), Offset(e.x + 4, mouthY), 1.5f)
                 }
 
-                is FastGoblin -> { // прямой
+                is FastGoblin -> {
                     drawLine(Color.Black, Offset(e.x - 4, mouthY), Offset(e.x + 4, mouthY), 1.5f)
                 }
 
-                is TankGoblin -> { // злой
+                is TankGoblin -> {
                     drawLine(Color.Black, Offset(e.x - 4, mouthY + 2), Offset(e.x, mouthY), 1.5f)
                     drawLine(Color.Black, Offset(e.x, mouthY), Offset(e.x + 4, mouthY + 2), 1.5f)
                 }
@@ -462,8 +455,6 @@ fun GameCanvas(gameState: GameState, frameTick: Int) {
             }
         }
 
-
-        // 💥 Снаряды
         gameState.projectiles.forEach { p ->
             val col = when (p) {
                 is SplashProjectile -> Color(0xFFFF7043)
@@ -525,14 +516,11 @@ fun TopBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Левая часть
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(gameState.mapName, color = Color.White)
                 Text("Wave: ${gameState.waveNumber}", color = Color.White)
                 Text("⏳ ${"%.1f".format(gameState.timeToNextWave)}s", color = Color.White)
             }
-
-            // Правая часть — иконка домой
             Box(
                 modifier = Modifier
                     .size(36.dp)

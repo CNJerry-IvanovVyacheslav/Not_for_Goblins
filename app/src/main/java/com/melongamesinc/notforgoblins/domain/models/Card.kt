@@ -14,6 +14,7 @@ enum class CardEffectType {
     INCREASE_TOWER_RANGE,
     GIVE_GOLD,
     ADD_TOWER,
+    UPGRADE_RANDOM,
     UNLOCK_TOWER,
     GLOBAL_BUFF,
     ONE_SHOT_DAMAGE,

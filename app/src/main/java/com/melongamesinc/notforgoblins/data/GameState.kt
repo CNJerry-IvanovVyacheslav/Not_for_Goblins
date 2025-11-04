@@ -31,9 +31,12 @@ class GameState {
     var gold by mutableStateOf(100)
     var towerToPlaceOptions by mutableStateOf<List<String>>(emptyList())
     var towerToPlace by mutableStateOf<String?>(null)
+    var globalCritChance: Float? by mutableStateOf(0f)
     var goldMultiplier: Float = 1f
     var xpMultiplier: Float = 1f
     var baseHealth by mutableStateOf(20)
+    var globalSlowMultiplier: Float? = null
+    var globalSlowUntilMs: Long? = null
     var showCardChoice by mutableStateOf(false)
     var score by mutableStateOf(0)
 
@@ -140,7 +143,6 @@ class GameState {
         awaitingTowerPlacement = false
         towerToPlace = null
 
-        // если после установки башни осталась очередь уровней — показываем следующую карту
         if (pendingLevelUps.isNotEmpty()) {
             processNextLevelUp()
         } else if (!showUpgradeModal) {
@@ -174,7 +176,7 @@ class GameState {
         }
         enemies.removeAll(deadEnemies)
 
-        for (t in towers) t.update(delta, enemies, projectiles)
+        for (t in towers) t.update(delta, enemies, projectiles, globalCrit = globalCritChance ?: 0f)
 
         val deadProjectiles = mutableListOf<Projectile>()
         for (p in projectiles) {
@@ -249,6 +251,27 @@ class GameState {
         if (!showCardChoice) processNextLevelUp()
     }
 
+    fun applyGlobalSlow(multiplier: Float, durationMs: Long) {
+        val now = System.currentTimeMillis()
+        globalSlowMultiplier = multiplier
+        globalSlowUntilMs = now + durationMs
+
+        enemies.forEach {
+            it.applySlow(multiplier, durationMs, now)
+        }
+    }
+
+    fun addEnemy(enemy: BaseEnemy) {
+        val now = System.currentTimeMillis()
+        globalSlowMultiplier?.let { multiplier ->
+            val remaining = (globalSlowUntilMs ?: now) - now
+            if (remaining > 0) {
+                enemy.applySlow(multiplier, remaining, now)
+            }
+        }
+        enemies.add(enemy)
+    }
+
     private fun processNextLevelUp() {
         if (pendingLevelUps.isNotEmpty()) {
             cardChoices = cardManager.generateThree()
@@ -260,31 +283,30 @@ class GameState {
     fun applyCard(card: Card) {
         cardManager.applyCard(card)
 
-        // убираем текущие карточки
         showCardChoice = false
         cardChoices = emptyList()
 
-        if (card.effectType == CardEffectType.ADD_TOWER) {
-            // если выбрали башню — сначала ставим её
-            towerToPlaceOptions = unlockedTowerTypes.toList()
-            towerToPlace = null
-            awaitingTowerPlacement = true
-            running = false
-            return
+        when (card.effectType) {
+            CardEffectType.ADD_TOWER -> {
+                towerToPlaceOptions = unlockedTowerTypes.toList()
+                towerToPlace = null
+                awaitingTowerPlacement = true
+                running = false
+            }
+
+            else -> {
+            }
         }
 
-        // иначе уменьшаем очередь и планируем следующий выбор карты
         if (pendingLevelUps.isNotEmpty()) {
             pendingLevelUps.removeAt(0)
             if (pendingLevelUps.isNotEmpty()) {
                 processNextLevelUp()
-            } else if (!showUpgradeModal && !awaitingTowerPlacement && !placingStartingTower) {
-                running = true
             }
-        } else {
-            if (!showUpgradeModal && !awaitingTowerPlacement && !placingStartingTower) {
-                running = true
-            }
+        }
+
+        if (!showCardChoice && !showUpgradeModal && !awaitingTowerPlacement && !placingStartingTower) {
+            running = true
         }
     }
 
