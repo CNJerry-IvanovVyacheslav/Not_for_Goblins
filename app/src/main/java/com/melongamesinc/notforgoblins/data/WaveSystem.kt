@@ -50,13 +50,19 @@ class WaveSystem(private val state: GameState) {
     private fun spawnEnemy() {
         val wave = state.waveNumber
 
-        val hpMult = 1.12f.pow(wave)
-        val spdMult = 1.025f.pow(wave)
+        val hpMult = 1.08f.pow(wave)      // ХП врагов растёт постепенно
+        val spdMult = 1.015f.pow(wave)    // Скорость растёт медленно
 
-        val enemiesPerSpawn = ((spawnMultiplier * 1 + wave * 0.3f)).toInt().coerceAtLeast(1)
+        // Линейный рост врагов, ограниченный максимумом
+        val maxEnemiesPerSpawn = when {
+            wave < 5 -> 2
+            wave < 10 -> 3
+            else -> 4
+        }
+        val enemiesPerSpawn = ((1 + wave * 0.1f)).toInt().coerceAtMost(maxEnemiesPerSpawn)
 
         repeat(enemiesPerSpawn) { i ->
-            val type = if (wave % 5 == 0 && Random.nextFloat() < 0.4f) EnemyType.TANK
+            val type = if (wave % 5 == 0 && Random.nextFloat() < 0.2f) EnemyType.TANK
             else chooseEnemyType(wave)
 
             val baseEnemy: BaseEnemy = when (type) {
@@ -65,14 +71,12 @@ class WaveSystem(private val state: GameState) {
                 EnemyType.TANK -> TankGoblin(state.path, hpMult, spdMult)
             }
 
-            val enemy = baseEnemy
+            val yOffset = Random.nextFloat() * 80f - 40f
+            baseEnemy.x = -Random.nextFloat() * 50f
+            baseEnemy.y = state.path.first().second + yOffset
 
-            val yOffset = Random.nextFloat() * 100f - 50f
-            enemy.x = -Random.nextFloat() * 50f
-            enemy.y = state.path.first().second + yOffset
-
-            enemy.spawnDelay = i * 150L
-            state.enemies.add(enemy)
+            baseEnemy.spawnDelay = i * 250L // увеличиваем интервал между врагами
+            state.enemies.add(baseEnemy)
         }
     }
 
@@ -91,8 +95,13 @@ class WaveSystem(private val state: GameState) {
 
     private fun startNextWave() {
         state.waveNumber++
-        spawnMultiplier = 1f * 1.18f.pow(state.waveNumber)
-        waveDuration = (6000f + state.waveNumber * 300).coerceAtMost(15000f)
+
+        // Рост интервала между спавнами и мультипликатора врагов
+        spawnMultiplier = 1f + state.waveNumber * 0.05f
+        waveDuration = (7000f + state.waveNumber * 200).coerceAtMost(12000f)
+        spawnInterval =
+            (500f + state.waveNumber * 50f).coerceAtMost(1200f) // увеличение интервала между спавнами
+
         timer = waveDuration
         nextSpawn = 0f
         timeToNextWave = timer / 1000f

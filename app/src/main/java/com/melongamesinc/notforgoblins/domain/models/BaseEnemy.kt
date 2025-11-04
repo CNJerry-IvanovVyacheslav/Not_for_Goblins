@@ -55,6 +55,10 @@ open class BaseEnemy(
         }
     }
 
+    fun nextTarget(): Pair<Float, Float> {
+        return path.getOrElse(pathIndex + 1) { path.last() }
+    }
+
     open fun hitBy(projectile: Projectile): Boolean {
         val d = sqrt((x - projectile.x).pow(2) + (y - projectile.y).pow(2))
         return d < 16f

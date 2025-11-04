@@ -140,9 +140,16 @@ class GameState {
         awaitingTowerPlacement = false
         towerToPlace = null
 
-        if (!showUpgradeModal && !showCardChoice) running = true
+        // если после установки башни осталась очередь уровней — показываем следующую карту
+        if (pendingLevelUps.isNotEmpty()) {
+            processNextLevelUp()
+        } else if (!showUpgradeModal) {
+            running = true
+        }
+
         waveManager.start()
     }
+
 
     fun isSlotFree(index: Int) = towerSlots[index].let { (sx, sy) ->
         towers.none { t -> (t.x - sx).pow(2) + (t.y - sy).pow(2) < 1f }
@@ -252,22 +259,35 @@ class GameState {
 
     fun applyCard(card: Card) {
         cardManager.applyCard(card)
+
+        // убираем текущие карточки
         showCardChoice = false
         cardChoices = emptyList()
 
-        if (pendingLevelUps.isNotEmpty()) {
-            pendingLevelUps.removeAt(0)
-            processNextLevelUp()
-        } else {
-            if (!showUpgradeModal) running = true
-        }
-
         if (card.effectType == CardEffectType.ADD_TOWER) {
+            // если выбрали башню — сначала ставим её
             towerToPlaceOptions = unlockedTowerTypes.toList()
             towerToPlace = null
             awaitingTowerPlacement = true
+            running = false
+            return
+        }
+
+        // иначе уменьшаем очередь и планируем следующий выбор карты
+        if (pendingLevelUps.isNotEmpty()) {
+            pendingLevelUps.removeAt(0)
+            if (pendingLevelUps.isNotEmpty()) {
+                processNextLevelUp()
+            } else if (!showUpgradeModal && !awaitingTowerPlacement && !placingStartingTower) {
+                running = true
+            }
+        } else {
+            if (!showUpgradeModal && !awaitingTowerPlacement && !placingStartingTower) {
+                running = true
+            }
         }
     }
+
 
     fun upgradeCost(tower: BaseTower): Int = tower.upgradeCost(playerLevel = level)
 
