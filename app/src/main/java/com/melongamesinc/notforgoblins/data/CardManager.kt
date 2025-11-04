@@ -119,7 +119,61 @@ class CardManager(private val state: GameState) {
                 "Knowledge Crystal",
                 "Gain 100 XP instantly",
                 CardEffectType.GLOBAL_BUFF,
-                value = 100f  // будем добавлять к experience напрямую
+                value = 100f
+            )
+        )
+        pool.add(
+            Card(
+                "crit_chance",
+                "Sharpened Arrows",
+                "All towers gain 10% critical hit chance",
+                CardEffectType.GLOBAL_BUFF,
+                0.1f
+            )
+        )
+        pool.add(
+            Card(
+                "range2",
+                "Far Sighted",
+                "Increase all towers' range by 10",
+                CardEffectType.INCREASE_TOWER_RANGE,
+                10f
+            )
+        )
+        pool.add(
+            Card(
+                "dmg2",
+                "Deadly Tips",
+                "Increase all towers' damage by 2",
+                CardEffectType.INCREASE_TOWER_DAMAGE,
+                2f
+            )
+        )
+        pool.add(Card("gold2", "Treasure Hoard", "Get 1000 gold", CardEffectType.GIVE_GOLD, 1000f))
+        pool.add(
+            Card(
+                "heal_base",
+                "Reinforced Walls",
+                "Restore 5 base health",
+                CardEffectType.GLOBAL_BUFF,
+                5f
+            )
+        )
+        pool.add(
+            Card(
+                "slow_all",
+                "Icy Mist",
+                "Slow all enemies by 50% for 10 seconds",
+                CardEffectType.GLOBAL_BUFF,
+                10000f
+            )
+        )
+        pool.add(
+            Card(
+                "add_upgrade_tower",
+                "Upgrade Tower",
+                "Upgrade a random tower for free",
+                CardEffectType.UPGRADE_RANDOM
             )
         )
 
@@ -166,10 +220,12 @@ class CardManager(private val state: GameState) {
             }
 
             CardEffectType.UNLOCK_TOWER -> card.payload?.let { state.unlockedTowerTypes.add(it) }
+
             CardEffectType.ONE_SHOT_DAMAGE -> state.enemies.forEach { it.hp -= card.value.toInt() }
+
             CardEffectType.STUN_ALL -> {
                 val now = System.currentTimeMillis()
-                state.enemies.forEach { it.applySlow(0f, card.value.toLong(), now) }
+                state.enemies.forEach { it.applyStun(card.value.toLong(), now) }
             }
 
             CardEffectType.GLOBAL_BUFF -> {
@@ -185,7 +241,21 @@ class CardManager(private val state: GameState) {
                         state.experience += card.value.toInt()
                         state.checkLevelUp()
                     }
+
+                    "crit_chance" -> state.globalCritChance =
+                        (state.globalCritChance ?: 0f) + card.value
+
+                    "heal_base" -> state.baseHealth += card.value.toInt()
+                    "slow_all" -> {
+                        val duration = card.value.toLong()
+                        state.applyGlobalSlow(0.5f, duration)
+                    }
                 }
+            }
+
+            CardEffectType.UPGRADE_RANDOM -> {
+                val tower = state.towers.randomOrNull()
+                tower?.upgradeFree()
             }
         }
     }

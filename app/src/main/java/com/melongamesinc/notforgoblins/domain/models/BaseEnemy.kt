@@ -23,10 +23,15 @@ open class BaseEnemy(
 
     private var slowUntilMs: Long = 0
     private var slowMultiplier: Float = 1f
+    private var stunUntilMs: Long = 0
 
     fun applySlow(multiplier: Float, durationMs: Long, nowMs: Long) {
         slowMultiplier = multiplier
         slowUntilMs = nowMs + durationMs
+    }
+
+    fun applyStun(durationMs: Long, nowMs: Long) {
+        stunUntilMs = nowMs + durationMs
     }
 
     fun update(delta: Float, nowMs: Long) {
@@ -43,6 +48,8 @@ open class BaseEnemy(
 
         if (nowMs > slowUntilMs) slowMultiplier = 1f
 
+        if (nowMs < stunUntilMs) return
+
         val (tx, ty) = path[pathIndex + 1]
         val dx = tx - x
         val dy = ty - y
@@ -53,6 +60,10 @@ open class BaseEnemy(
             x += (dx / dist) * step
             y += (dy / dist) * step
         }
+    }
+
+    fun nextTarget(): Pair<Float, Float> {
+        return path.getOrElse(pathIndex + 1) { path.last() }
     }
 
     open fun hitBy(projectile: Projectile): Boolean {
